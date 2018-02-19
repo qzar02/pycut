@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <title>PyCut</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
+    <script defer src="https://use.fontawesome.com/releases/v5.0.6/js/all.js"></script>
+  </head>
+
+  <body>
+    <div class="container">
+
+      <div class="alert alert-info alert-dismissible fade" id="alert" role="alert">
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+        <span id="alertText"></span>
+      </div>
+
+
+      <h1>PyCut</h1>
+      <p class="lead">Integração Python com a lib <a href="http://optimalon.com/cutting_optimization_library.htm">CutGLib</a> </p>
+
+      <h3>Arquivo YAML de entrada</h3>
+      <form method="POST" id="formRun">
+      <div class="row">
+        <div class="col-md-12">
+                  
+          <div class="form-group">
+<textarea name="dataInput" class="form-control" rows="10">
+W: 600
+H: 850
+parts:
+  - w: 300
+    h: 200
+    id: Part1              
+  - w: 150
+    h: 400   
+    r: False           
+    id: Part2              
+  - w: 100
+    h: 200              
+    id: Part3              
+  - w: 130
+    h: 320              
+    id: Part4              
+</textarea>
+          </div>
+       
+        </div>
+      </div>
+      <button type="submit" id="btnRun" class="btn btn-primary"><i class="fa fa-play"></i> Run!</button>
+      </form>
+      <p id="result"></p>
+      <nav>
+        <ul class="pagination" id="pagination">
+        </ul>
+      </nav>
+      <canvas id="resultCut"></canvas>
+      
+    </div> <!-- /container -->
+    
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tether/1.4.0/js/tether.min.js" integrity="sha384-DztdAPBWPRXSA/3eYEEUWrWCy7G5KFbe8fFjk5JAIxUYHKkDx6Qin1DkWx51bBrb" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/js/bootstrap.min.js" integrity="sha384-vBWWzlZJ8ea9aCX4pEW3rVHjgjt7zpkNpZk+02D9phzyeVkE+jo0ieGizqPLForn" crossorigin="anonymous"></script>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/fabric.js/2.0.1/fabric.min.js"></script>
+
+    <script>
+      function callbackSuccess(data){
+        if (data.status=='ERROR'){
+          showAlert("Error:" + data.error);
+          buttonLoadingToggle("#btnRun", false);
+        }
+        else {
+          var task_id = data['task_id'];
+          updateStatus(task_id);
+        }
+      }
+
+      function addStockPage(stock, stock_page){
+        var $pagination = $('#pagination');
+        var $item = $('<li class="page-item"><a class="page-link" href="#"></a></li>').appendTo($pagination);
+        var $btn = $item.find('a');
+        $btn.html(stock_page);
+
+        $btn.on('click', function(evt){
+          evt.preventDefault();
+          showPartsOnCanvas(stock);
+          return false;
+        });
+
+      }
+
+      function showStocks(result){
+        var stocks = {}; 
+        result.parts.forEach(function(part){
+          if ( stocks[part.stock] == undefined ){
+            stocks[part.stock] = {W: result.params.W, H: result.params.H, parts: []};
+          }
+          part.id = result.params.parts[ part.index ]['id'];
+          stocks[part.stock].parts.push(
+            part
+          );
+        })
+
+        $('#pagination').empty();
+        Object.keys(stocks).forEach(function(stock_index){
+          var stock = stocks[stock_index];
+          addStockPage(stock, stock_index);
+        });
+
+      }
+
+      function showPartsOnCanvas(stock){
+        canvas.clear()
+
+        canvas.add(
+          new fabric.Rect(
+            {
+              left: 0,
+              top: 0,
+              fill: null,
+              stroke: 'red',
+              width: stock.W,
+              height: stock.H
+            }
+          )
+        );
+
+        stock.parts.forEach(function(part){
+          if (part.rotated){
+            var w = part.h 
+            var h = part.w 
+          }else{
+            var h = part.h 
+            var w = part.w 
+          }
+          canvas.add(
+            new fabric.Rect({
+              left: part.x,
+              top: part.y,
+              fill: null,
+              stroke: 'red',
+              width: w,
+              height: h,
+            })
+          )
+
+          canvas.add(
+            new fabric.Text(
+              part.id,
+              {
+                textAlign: "center",
+                left: part.x + w/2 ,
+                top: part.y + h/2,
+                fontSize: 12
+              }
+            )
+          );
+          
+          canvas.add(
+            new fabric.Text(
+              "W="+part.w/10+"cm H=" + part.h/10 + "cm", 
+              {
+                left: part.x ,
+                top: part.y,
+                fontSize: 10
+              }
+            )
+          );
+
+        })
+      }
+      
+      function zoomCanvas(result){
+        var w = result.params.W;
+        var h = result.params.H;
+        var scale = (w > h) ? canvas.getWidth()/w : canvas.getHeight()/h ;
+        canvas.setZoom(canvas.getZoom()*scale);
+        canvas.add(
+          new fabric.Rect(
+            {
+              left: 0,
+              top: 0,
+              fill: null,
+              stroke: 'red',
+              width: w,
+              height: h
+            }
+          )
+        );
+        canvas.renderAll();
+      }
+
+      function getStatus(task_id, interval){
+        $.get("/status/" + task_id, function(task){
+          if (task.state!='PENDING'){
+            clearInterval(interval);
+            showStocks(task.result);
+            buttonLoadingToggle("#btnRun", false);
+            showAlert('Otimização feita com sucesso!');
+          }
+        }) 
+      }
+      
+      function updateStatus(task_id){
+          interval = setInterval(function(){getStatus(task_id, interval)}, 1000 );
+      }
+
+      function runOptimize(){
+        buttonLoadingToggle("#btnRun", true);
+        showAlert(false);
+
+        $.ajax({
+          type: "POST",
+          contentType: "text/html; charset=utf-8",
+          url: "{{url_for('run')}}",
+          data: $('[name=dataInput]').val(),
+          success: callbackSuccess,
+          dataType: "json"
+        });        
+      }
+
+      function showAlert(message){
+        if (message){
+          $('#alert').addClass('show'); 
+          $('#alertText').text(message);
+        }else{
+          $('#alert').removeClass('show'); 
+        }
+      }
+
+      function buttonLoadingToggle(selector, loading){
+        var $selector = $(selector);
+        
+        if ( $selector.data('text') == undefined ) {
+          $selector.data('text', $selector.html() );
+        }
+
+        if ( !$selector.data('loading') && loading ){
+          $selector.data('loading', true);
+          $selector.html("<i class='fa fa-circle-o-notch fa-spin'></i> Executando... ");
+          $selector.prop('disabled', true);
+        }
+        if ($selector.data('loading') && !loading) {
+          $selector.data('loading', false);
+          $selector.html($selector.data('text'));
+          $selector.prop('disabled', false);
+        }
+      
+      }
+
+    function resize(){
+      var container = $('.container');
+      var width = $(container).width()
+      var height = width;
+      canvas.setWidth( width );
+      canvas.setHeight( height );
+      canvas.calcOffset();
+      canvas.renderAll();
+    }
+
+    function initCanvas(){
+      $(window).resize(function() {
+        setTimeout(resize, 500);
+      });
+      canvas = new fabric.StaticCanvas('resultCut');
+      canvas.setBackgroundColor('rgba(255, 255, 255, 1.0)', canvas.renderAll.bind(canvas));
+      resize();
+    }
+
+    $(function(){
+
+      $('#alert').on('close.bs.alert', function(){ showAlert(false); return false;} )
+
+      $('#formRun').on('submit', function(evt){
+        evt.preventDefault();
+        runOptimize();
+        return false;
+      })
+
+      initCanvas();
+
+    });
+
+    </script>
+
+  </body>
+</html>
